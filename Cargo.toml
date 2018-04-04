@@ -3,12 +3,14 @@ name = "gst-plugin-threadshare"
 version = "0.1.0"
 authors = ["Sebastian Dröge <sebastian@centricular.com>"]
 license = "LGPL-2.1+"
+build = "build.rs"
 
 [dependencies]
 glib-sys = { git = "https://github.com/gtk-rs/sys" }
 gstreamer-sys = { git = "https://github.com/sdroege/gstreamer-sys" }
 glib = { git = "https://github.com/gtk-rs/glib" }
 gstreamer = { git = "https://github.com/sdroege/gstreamer-rs" }
+gstreamer-audio = { git = "https://github.com/sdroege/gstreamer-rs" }
 gobject-subclass = { git = "https://github.com/sdroege/gobject-subclass" }
 gst-plugin = { git = "https://github.com/sdroege/gst-plugin-rs" }
 tokio = { git = "https://github.com/tokio-rs/tokio" }
@@ -22,6 +24,11 @@ lazy_static = "1.0"
 either = "1.0"
 rand = "0.5"
 net2 = "0.2"
+muldiv = "0.1"
+byte-slice-cast = "0.1"
+
+[build-dependencies]
+pkg-config = "0.3.7"
 
 [lib]
 name = "gstthreadshare"
