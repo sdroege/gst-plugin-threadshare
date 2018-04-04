@@ -65,7 +65,7 @@ struct Settings {
     context_threads: i32,
     context_wait: u32,
     samples_per_buffer: u32,
-    tone_gen_settings: ToneGenSettings,
+    tone_gen_settings: tonegen::ToneGenSettings,
 }
 
 impl Default for Settings {
@@ -194,7 +194,7 @@ struct State {
     buffer_pool: Option<gst::BufferPool>,
     sample_offset: u64,
     start_time: gst::ClockTime,
-    tone_gen: Option<(ToneGen, ToneGenSettings)>,
+    tone_gen: Option<(tonegen::ToneGen, tonegen::ToneGenSettings)>,
 }
 
 impl Default for State {
@@ -451,7 +451,7 @@ impl ToneSrc {
                             }
                             tone_gen => {
                                 *tone_gen = Some((
-                                    ToneGen::new(&settings.tone_gen_settings),
+                                    tonegen::ToneGen::new(&settings.tone_gen_settings),
                                     settings.tone_gen_settings,
                                 ));
                             }
@@ -885,120 +885,125 @@ pub fn register(plugin: &gst::Plugin) {
     gst::Element::register(plugin, "ts-tonesrc", 0, type_);
 }
 
-use std::os::raw::c_void;
-use std::ptr;
+mod tonegen {
+    use super::*;
+    use std::os::raw::c_void;
+    use std::ptr;
 
-#[repr(C)]
-struct ToneGenDescriptor(c_void);
-#[repr(C)]
-struct ToneGenState(c_void);
+    #[repr(C)]
+    struct ToneGenDescriptor(c_void);
+    #[repr(C)]
+    struct ToneGenState(c_void);
 
-struct ToneGen(ptr::NonNull<ToneGenState>, ptr::NonNull<ToneGenDescriptor>);
+    pub struct ToneGen(ptr::NonNull<ToneGenState>, ptr::NonNull<ToneGenDescriptor>);
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-struct ToneGenSettings {
-    freq1: u32,
-    vol1: i32,
-    freq2: u32,
-    vol2: i32,
-    on_time1: u32,
-    off_time1: u32,
-    on_time2: u32,
-    off_time2: u32,
-    repeat: bool,
-}
-
-impl Default for ToneGenSettings {
-    fn default() -> Self {
-        Self {
-            freq1: DEFAULT_FREQ1,
-            vol1: DEFAULT_VOL1,
-            freq2: DEFAULT_FREQ2,
-            vol2: DEFAULT_VOL2,
-            on_time1: DEFAULT_ON_TIME1,
-            off_time1: DEFAULT_OFF_TIME1,
-            on_time2: DEFAULT_ON_TIME2,
-            off_time2: DEFAULT_OFF_TIME2,
-            repeat: DEFAULT_REPEAT,
-        }
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    pub struct ToneGenSettings {
+        pub freq1: u32,
+        pub vol1: i32,
+        pub freq2: u32,
+        pub vol2: i32,
+        pub on_time1: u32,
+        pub off_time1: u32,
+        pub on_time2: u32,
+        pub off_time2: u32,
+        pub repeat: bool,
     }
-}
 
-extern "C" {
-    fn tone_gen_descriptor_init(
-        ptr: *mut ToneGenDescriptor,
-        freq1: i32,
-        vol1: i32,
-        freq2: i32,
-        vol2: i32,
-        on_time1: i32,
-        off_time1: i32,
-        on_time2: i32,
-        off_time2: i32,
-        repeat: i32,
-    ) -> *mut ToneGenDescriptor;
-    fn tone_gen_descriptor_free(ptr: *mut ToneGenDescriptor);
-
-    fn tone_gen_init(ptr: *mut ToneGenState, desc: *mut ToneGenDescriptor) -> *mut ToneGenState;
-    fn tone_gen_free(ptr: *mut ToneGenState);
-
-    fn tone_gen(ptr: *mut ToneGenState, amp: *mut i16, max_samples: i32) -> i32;
-}
-
-impl ToneGen {
-    fn new(settings: &ToneGenSettings) -> Self {
-        unsafe {
-            let ptr = ptr::NonNull::new(tone_gen_descriptor_init(
-                ptr::null_mut(),
-                settings.freq1 as i32,
-                settings.vol1,
-                settings.freq2 as i32,
-                settings.vol2,
-                settings.on_time1 as i32,
-                settings.off_time1 as i32,
-                settings.on_time2 as i32,
-                settings.off_time2 as i32,
-                if settings.repeat { 1 } else { 0 },
-            )).unwrap();
-            let ptr2 = ptr::NonNull::new(tone_gen_init(ptr::null_mut(), ptr.as_ptr())).unwrap();
-
-            ToneGen(ptr2, ptr)
+    impl Default for ToneGenSettings {
+        fn default() -> Self {
+            Self {
+                freq1: DEFAULT_FREQ1,
+                vol1: DEFAULT_VOL1,
+                freq2: DEFAULT_FREQ2,
+                vol2: DEFAULT_VOL2,
+                on_time1: DEFAULT_ON_TIME1,
+                off_time1: DEFAULT_OFF_TIME1,
+                on_time2: DEFAULT_ON_TIME2,
+                off_time2: DEFAULT_OFF_TIME2,
+                repeat: DEFAULT_REPEAT,
+            }
         }
     }
 
-    fn update(&mut self, settings: &ToneGenSettings) {
-        unsafe {
-            let ptr = ptr::NonNull::new(tone_gen_descriptor_init(
-                self.1.as_ptr(),
-                settings.freq1 as i32,
-                settings.vol1,
-                settings.freq2 as i32,
-                settings.vol2,
-                settings.on_time1 as i32,
-                settings.off_time1 as i32,
-                settings.on_time2 as i32,
-                settings.off_time2 as i32,
-                if settings.repeat { 1 } else { 0 },
-            )).unwrap();
-            self.1 = ptr;
+    extern "C" {
+        fn tone_gen_descriptor_init(
+            ptr: *mut ToneGenDescriptor,
+            freq1: i32,
+            vol1: i32,
+            freq2: i32,
+            vol2: i32,
+            on_time1: i32,
+            off_time1: i32,
+            on_time2: i32,
+            off_time2: i32,
+            repeat: i32,
+        ) -> *mut ToneGenDescriptor;
+        fn tone_gen_descriptor_free(ptr: *mut ToneGenDescriptor);
 
-            let ptr2 = ptr::NonNull::new(tone_gen_init(self.0.as_ptr(), self.1.as_ptr())).unwrap();
-            self.0 = ptr2;
+        fn tone_gen_init(ptr: *mut ToneGenState, desc: *mut ToneGenDescriptor)
+            -> *mut ToneGenState;
+        fn tone_gen_free(ptr: *mut ToneGenState);
+
+        fn tone_gen(ptr: *mut ToneGenState, amp: *mut i16, max_samples: i32) -> i32;
+    }
+
+    impl ToneGen {
+        pub fn new(settings: &ToneGenSettings) -> Self {
+            unsafe {
+                let ptr = ptr::NonNull::new(tone_gen_descriptor_init(
+                    ptr::null_mut(),
+                    settings.freq1 as i32,
+                    settings.vol1,
+                    settings.freq2 as i32,
+                    settings.vol2,
+                    settings.on_time1 as i32,
+                    settings.off_time1 as i32,
+                    settings.on_time2 as i32,
+                    settings.off_time2 as i32,
+                    if settings.repeat { 1 } else { 0 },
+                )).unwrap();
+                let ptr2 = ptr::NonNull::new(tone_gen_init(ptr::null_mut(), ptr.as_ptr())).unwrap();
+
+                ToneGen(ptr2, ptr)
+            }
+        }
+
+        pub fn update(&mut self, settings: &ToneGenSettings) {
+            unsafe {
+                let ptr = ptr::NonNull::new(tone_gen_descriptor_init(
+                    self.1.as_ptr(),
+                    settings.freq1 as i32,
+                    settings.vol1,
+                    settings.freq2 as i32,
+                    settings.vol2,
+                    settings.on_time1 as i32,
+                    settings.off_time1 as i32,
+                    settings.on_time2 as i32,
+                    settings.off_time2 as i32,
+                    if settings.repeat { 1 } else { 0 },
+                )).unwrap();
+                self.1 = ptr;
+
+                let ptr2 =
+                    ptr::NonNull::new(tone_gen_init(self.0.as_ptr(), self.1.as_ptr())).unwrap();
+                self.0 = ptr2;
+            }
+        }
+
+        pub fn generate(&mut self, amp: &mut [i16]) -> i32 {
+            unsafe { tone_gen(self.0.as_ptr(), amp.as_mut_ptr(), amp.len() as i32) }
         }
     }
 
-    fn generate(&mut self, amp: &mut [i16]) -> i32 {
-        unsafe { tone_gen(self.0.as_ptr(), amp.as_mut_ptr(), amp.len() as i32) }
-    }
-}
-
-impl Drop for ToneGen {
-    fn drop(&mut self) {
-        unsafe {
-            tone_gen_descriptor_free(self.1.as_ptr());
-            tone_gen_free(self.0.as_ptr());
+    impl Drop for ToneGen {
+        fn drop(&mut self) {
+            unsafe {
+                tone_gen_descriptor_free(self.1.as_ptr());
+                tone_gen_free(self.0.as_ptr());
+            }
         }
     }
-}
 
-unsafe impl Send for ToneGen {}
+    unsafe impl Send for ToneGen {}
+}
