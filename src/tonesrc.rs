@@ -48,12 +48,23 @@ use iocontext::*;
 const DEFAULT_CONTEXT: &'static str = "";
 const DEFAULT_CONTEXT_THREADS: i32 = 0;
 const DEFAULT_CONTEXT_WAIT: u32 = 0;
+const DEFAULT_SAMPLES_PER_BUFFER: u32 = 160;
+const DEFAULT_FREQ1: u32 = 0;
+const DEFAULT_VOL1: i32 = 0;
+const DEFAULT_FREQ2: u32 = 0;
+const DEFAULT_VOL2: i32 = 0;
+const DEFAULT_ON_TIME1: u32 = 1000;
+const DEFAULT_ON_TIME2: u32 = 1000;
+const DEFAULT_OFF_TIME1: u32 = 1000;
+const DEFAULT_OFF_TIME2: u32 = 1000;
+const DEFAULT_REPEAT: bool = false;
 
 #[derive(Debug, Clone)]
 struct Settings {
     context: String,
     context_threads: i32,
     context_wait: u32,
+    samples_per_buffer: u32,
     tone_gen_settings: ToneGenSettings,
 }
 
@@ -63,12 +74,13 @@ impl Default for Settings {
             context: DEFAULT_CONTEXT.into(),
             context_threads: DEFAULT_CONTEXT_THREADS,
             context_wait: DEFAULT_CONTEXT_WAIT,
+            samples_per_buffer: DEFAULT_SAMPLES_PER_BUFFER,
             tone_gen_settings: Default::default(),
         }
     }
 }
 
-static PROPERTIES: [Property; 3] = [
+static PROPERTIES: [Property; 13] = [
     Property::String(
         "context",
         "Context",
@@ -90,6 +102,85 @@ static PROPERTIES: [Property; 3] = [
         "Throttle poll loop to run at most once every this many ms",
         (0, 1000),
         DEFAULT_CONTEXT_WAIT,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::UInt(
+        "samples-per-buffer",
+        "Samples Per Buffer",
+        "Number of samples per output buffer",
+        (1, u32::MAX),
+        DEFAULT_SAMPLES_PER_BUFFER,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::UInt(
+        "freq1",
+        "Frequency 1",
+        "Frequency of first telephony tone component",
+        (0, 4000),
+        DEFAULT_FREQ1,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::Int(
+        "vol1",
+        "Volume 1",
+        "Volume of first telephony tone component",
+        (-50, 0),
+        DEFAULT_VOL1,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::UInt(
+        "freq2",
+        "Frequency 2",
+        "Frequency of second telephony tone component",
+        (0, 4000),
+        DEFAULT_FREQ2,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::Int(
+        "vol2",
+        "Volume 2",
+        "Volume of second telephony tone component",
+        (-50, 0),
+        DEFAULT_VOL2,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::UInt(
+        "on-time1",
+        "On Time 1",
+        "Time of the first period when the tone signal is present",
+        (0, u32::MAX),
+        DEFAULT_ON_TIME1,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::UInt(
+        "off-time1",
+        "Off Time 1",
+        "Time of the first period when the tone signal is off",
+        (0, u32::MAX),
+        DEFAULT_OFF_TIME1,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::UInt(
+        "on-time2",
+        "On Time 2",
+        "Time of the second period when the tone signal is present",
+        (0, u32::MAX),
+        DEFAULT_ON_TIME2,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::UInt(
+        "off-time2",
+        "Off Time 2",
+        "Time of the second period when the tone signal is off",
+        (0, u32::MAX),
+        DEFAULT_OFF_TIME2,
+        PropertyMutability::ReadWrite,
+    ),
+    Property::Boolean(
+        "repeat",
+        "Repeat",
+        "Whether to repeat specified tone indefinitly",
+        DEFAULT_REPEAT,
         PropertyMutability::ReadWrite,
     ),
 ];
@@ -534,8 +625,7 @@ impl ToneSrc {
         let caps = self.src_pad.get_pad_template_caps().unwrap();
         let pool = gst::BufferPool::new();
         let mut config = pool.get_config();
-        // TODO: configurable buffer size
-        config.set_params(Some(&caps), 320, 0, 0);
+        config.set_params(Some(&caps), 2 * settings.samples_per_buffer, 0, 0);
         pool.set_config(config).map_err(|_| {
             gst_error_msg!(
                 gst::ResourceError::Settings,
@@ -614,6 +704,47 @@ impl ObjectImpl<Element> for ToneSrc {
                 let mut settings = self.settings.lock().unwrap();
                 settings.context_wait = value.get().unwrap();
             }
+            Property::UInt("samples-per-buffer", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.samples_per_buffer = value.get().unwrap();
+            }
+            Property::UInt("freq1", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.freq1 = value.get().unwrap();
+            }
+            Property::Int("vol1", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.vol1 = value.get().unwrap();
+            }
+
+            Property::UInt("freq2", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.freq2 = value.get().unwrap();
+            }
+            Property::Int("vol2", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.vol2 = value.get().unwrap();
+            }
+            Property::UInt("on-time1", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.on_time1 = value.get().unwrap();
+            }
+            Property::UInt("off-time1", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.off_time1 = value.get().unwrap();
+            }
+            Property::UInt("on-time2", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.on_time2 = value.get().unwrap();
+            }
+            Property::UInt("off-time2", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.off_time2 = value.get().unwrap();
+            }
+            Property::Boolean("repeat", ..) => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.tone_gen_settings.repeat = value.get().unwrap();
+            }
             _ => unimplemented!(),
         }
     }
@@ -633,6 +764,46 @@ impl ObjectImpl<Element> for ToneSrc {
             Property::UInt("context-wait", ..) => {
                 let mut settings = self.settings.lock().unwrap();
                 Ok(settings.context_wait.to_value())
+            }
+            Property::UInt("samples-per-buffer", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.samples_per_buffer.to_value())
+            }
+            Property::UInt("freq1", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.freq1.to_value())
+            }
+            Property::Int("vol1", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.vol1.to_value())
+            }
+            Property::UInt("freq2", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.freq2.to_value())
+            }
+            Property::Int("vol2", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.vol2.to_value())
+            }
+            Property::UInt("on-time1", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.on_time1.to_value())
+            }
+            Property::UInt("off-time1", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.off_time1.to_value())
+            }
+            Property::UInt("on-time2", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.on_time2.to_value())
+            }
+            Property::UInt("off-time2", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.off_time2.to_value())
+            }
+            Property::Boolean("repeat", ..) => {
+                let settings = self.settings.lock().unwrap();
+                Ok(settings.tone_gen_settings.repeat.to_value())
             }
             _ => unimplemented!(),
         }
@@ -721,29 +892,29 @@ struct ToneGen(ptr::NonNull<c_void>, ptr::NonNull<c_void>);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct ToneGenSettings {
-    freq1: i32,
+    freq1: u32,
     vol1: i32,
-    freq2: i32,
+    freq2: u32,
     vol2: i32,
-    on_time: i32,
-    off_time: i32,
-    on_time2: i32,
-    off_time2: i32,
+    on_time1: u32,
+    off_time1: u32,
+    on_time2: u32,
+    off_time2: u32,
     repeat: bool,
 }
 
 impl Default for ToneGenSettings {
     fn default() -> Self {
         Self {
-            freq1: 0,
-            vol1: 0,
-            freq2: 0,
-            vol2: 0,
-            on_time: 1000,
-            off_time: 1000,
-            on_time2: 1000,
-            off_time2: 1000,
-            repeat: false,
+            freq1: DEFAULT_FREQ1,
+            vol1: DEFAULT_VOL1,
+            freq2: DEFAULT_FREQ2,
+            vol2: DEFAULT_VOL2,
+            on_time1: DEFAULT_ON_TIME1,
+            off_time1: DEFAULT_OFF_TIME1,
+            on_time2: DEFAULT_ON_TIME2,
+            off_time2: DEFAULT_OFF_TIME2,
+            repeat: DEFAULT_REPEAT,
         }
     }
 }
@@ -755,8 +926,8 @@ extern "C" {
         vol1: i32,
         freq2: i32,
         vol2: i32,
-        on_time: i32,
-        off_time: i32,
+        on_time1: i32,
+        off_time1: i32,
         on_time2: i32,
         off_time2: i32,
         repeat: i32,
@@ -774,14 +945,14 @@ impl ToneGen {
         unsafe {
             let ptr = ptr::NonNull::new(tone_gen_descriptor_init(
                 ptr::null_mut(),
-                settings.freq1,
+                settings.freq1 as i32,
                 settings.vol1,
-                settings.freq2,
+                settings.freq2 as i32,
                 settings.vol2,
-                settings.on_time,
-                settings.off_time,
-                settings.on_time2,
-                settings.off_time2,
+                settings.on_time1 as i32,
+                settings.off_time1 as i32,
+                settings.on_time2 as i32,
+                settings.off_time2 as i32,
                 if settings.repeat { 1 } else { 0 },
             )).unwrap();
             let ptr2 = ptr::NonNull::new(tone_gen_init(ptr::null_mut(), ptr.as_ptr())).unwrap();
@@ -794,14 +965,14 @@ impl ToneGen {
         unsafe {
             let ptr = ptr::NonNull::new(tone_gen_descriptor_init(
                 self.1.as_ptr(),
-                settings.freq1,
+                settings.freq1 as i32,
                 settings.vol1,
-                settings.freq2,
+                settings.freq2 as i32,
                 settings.vol2,
-                settings.on_time,
-                settings.off_time,
-                settings.on_time2,
-                settings.off_time2,
+                settings.on_time1 as i32,
+                settings.off_time1 as i32,
+                settings.on_time2 as i32,
+                settings.off_time2 as i32,
                 if settings.repeat { 1 } else { 0 },
             )).unwrap();
             self.1 = ptr;
