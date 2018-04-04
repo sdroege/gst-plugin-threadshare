@@ -888,7 +888,12 @@ pub fn register(plugin: &gst::Plugin) {
 use std::os::raw::c_void;
 use std::ptr;
 
-struct ToneGen(ptr::NonNull<c_void>, ptr::NonNull<c_void>);
+#[repr(C)]
+struct ToneGenDescriptor(c_void);
+#[repr(C)]
+struct ToneGenState(c_void);
+
+struct ToneGen(ptr::NonNull<ToneGenState>, ptr::NonNull<ToneGenDescriptor>);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct ToneGenSettings {
@@ -921,7 +926,7 @@ impl Default for ToneGenSettings {
 
 extern "C" {
     fn tone_gen_descriptor_init(
-        ptr: *mut c_void,
+        ptr: *mut ToneGenDescriptor,
         freq1: i32,
         vol1: i32,
         freq2: i32,
@@ -931,13 +936,13 @@ extern "C" {
         on_time2: i32,
         off_time2: i32,
         repeat: i32,
-    ) -> *mut c_void;
-    fn tone_gen_descriptor_free(ptr: *mut c_void);
+    ) -> *mut ToneGenDescriptor;
+    fn tone_gen_descriptor_free(ptr: *mut ToneGenDescriptor);
 
-    fn tone_gen_init(ptr: *mut c_void, desc: *mut c_void) -> *mut c_void;
-    fn tone_gen_free(ptr: *mut c_void);
+    fn tone_gen_init(ptr: *mut ToneGenState, desc: *mut ToneGenDescriptor) -> *mut ToneGenState;
+    fn tone_gen_free(ptr: *mut ToneGenState);
 
-    fn tone_gen(ptr: *mut c_void, amp: *mut i16, max_samples: i32) -> i32;
+    fn tone_gen(ptr: *mut ToneGenState, amp: *mut i16, max_samples: i32) -> i32;
 }
 
 impl ToneGen {
