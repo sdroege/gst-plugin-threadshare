@@ -14,6 +14,7 @@ addons:
       - liborc-0.4-dev
       - libglib2.0-dev
       - libxml2-dev
+      - libspandsp-dev
 
 matrix:
   allow_failures:
