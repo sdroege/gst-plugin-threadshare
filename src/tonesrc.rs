@@ -31,7 +31,7 @@ use std::{i32, u16, u32};
 
 use futures::future;
 use futures::sync::oneshot;
-use futures::{Future, IntoFuture, Stream};
+use futures::{Future, Stream};
 
 use tokio::timer;
 
@@ -282,21 +282,6 @@ impl ToneSrc {
         })
     }
 
-    fn catch_panic_pad_function<T, F: FnOnce(&Self, &Element) -> T, G: FnOnce() -> T>(
-        parent: &Option<gst::Object>,
-        fallback: G,
-        f: F,
-    ) -> T {
-        let element = parent
-            .as_ref()
-            .cloned()
-            .unwrap()
-            .downcast::<Element>()
-            .unwrap();
-        let src = element.get_impl().downcast_ref::<ToneSrc>().unwrap();
-        element.catch_panic(fallback, |element| f(src, element))
-    }
-
     fn create_io_context_event(state: &State) -> Option<gst::Event> {
         if let (&Some(ref pending_future_id), &Some(ref io_context)) =
             (&state.pending_future_id, &state.io_context)
@@ -420,7 +405,7 @@ impl ToneSrc {
 
         let buffer_pool = match state.buffer_pool {
             Some(ref pool) => pool.clone(),
-            None => return future::Either::B(Err(()).into_future()),
+            None => return future::Either::B(future::err(())),
         };
 
         drop(state);
@@ -505,45 +490,22 @@ impl ToneSrc {
             Ok(()) => {
                 let mut state = self.state.lock().unwrap();
 
-                let State {
-                    ref pending_future_id,
-                    ref io_context,
+                if let State {
+                    io_context: Some(ref io_context),
+                    pending_future_id: Some(ref pending_future_id),
                     ref mut pending_future_cancel,
                     ..
-                } = *state;
-
-                if let (&Some(ref pending_future_id), &Some(ref io_context)) =
-                    (pending_future_id, io_context)
+                } = *state
                 {
-                    let pending_futures = io_context.drain_pending_futures(*pending_future_id);
+                    let (cancel, future) = io_context.drain_pending_futures(*pending_future_id);
+                    *pending_future_cancel = cancel;
 
-                    if !pending_futures.is_empty() {
-                        gst_log!(
-                            self.cat,
-                            obj: element,
-                            "Scheduling {} pending futures",
-                            pending_futures.len()
-                        );
-
-                        let (sender, receiver) = oneshot::channel();
-                        *pending_future_cancel = Some(sender);
-
-                        let future = pending_futures
-                            .for_each(|_| Ok(()))
-                            .select(receiver.then(|_| Ok(())))
-                            .then(|_| Ok(()));
-
-                        future::Either::A(Box::new(future))
-                    } else {
-                        *pending_future_cancel = None;
-                        future::Either::B(Ok(()).into_future())
-                    }
+                    future
                 } else {
-                    *pending_future_cancel = None;
-                    future::Either::B(Ok(()).into_future())
+                    future::Either::B(future::ok(()))
                 }
             }
-            Err(_) => future::Either::B(Err(()).into_future()),
+            Err(_) => future::Either::B(future::err(())),
         }
     }
 
@@ -656,7 +618,7 @@ impl ToneSrc {
                     Either::Left(_) => tonesrc.timeout(&element_clone),
                     Either::Right(_) => {
                         gst_debug!(tonesrc.cat, obj: &element_clone, "Interrupted");
-                        future::Either::B(Err(()).into_future())
+                        future::Either::B(future::err(()))
                     }
                 }
             });
