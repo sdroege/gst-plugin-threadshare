@@ -24,7 +24,7 @@ lazy_static = "1.0"
 either = "1.0"
 rand = "0.5"
 net2 = "0.2"
-muldiv = "0.1"
+muldiv = "0.2"
 byte-slice-cast = "0.1"
 
 [build-dependencies]
