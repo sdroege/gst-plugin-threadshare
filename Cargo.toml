@@ -25,7 +25,7 @@ either = "1.0"
 rand = "0.5"
 net2 = "0.2"
 muldiv = "0.2"
-byte-slice-cast = "0.1"
+byte-slice-cast = "0.2"
 
 [build-dependencies]
 pkg-config = "0.3.7"

@@ -443,7 +443,6 @@ impl ToneSrc {
 
                         let samples = {
                             let mut data = buffer.map_writable().unwrap();
-                            let data = data.as_mut_slice();
                             let data = data.as_mut_slice_of::<i16>().unwrap();
                             let tone_gen = state.tone_gen.as_mut().unwrap();
                             tone_gen.0.generate(data)
